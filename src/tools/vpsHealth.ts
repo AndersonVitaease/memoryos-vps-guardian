@@ -14,7 +14,7 @@
  *   evidence fields are null when unavailable.
  *
  * Deterministic thresholds (documented here, single source of truth):
- * - DEGRADED when memory used percent > MEMORY_USED_PERCENT_DEGRADED_THRESHOLD
+ * - DEGRADED when raw unrounded memory used percent > MEMORY_USED_PERCENT_DEGRADED_THRESHOLD
  * - DEGRADED when raw unrounded load per CPU (loadAverage1m / cpuCount) is strictly above LOAD_PER_CPU_DEGRADED_THRESHOLD
  * - HEALTHY when neither condition holds
  * - UNKNOWN only when essential evidence cannot be obtained (or is inconsistent)
@@ -117,13 +117,14 @@ export function assessVpsHealth(evidence: VpsHealthEvidence): VpsHealthResult {
     };
   }
 
-  const usedPercent = round1(((total - free) / total) * 100);
+  const rawUsedPercent = ((total - free) / total) * 100;
+  const usedPercent = round1(rawUsedPercent);
   const rawLoadPerCpu = load1m / cpuCount;
   const loadPerCpu = round1(rawLoadPerCpu);
   const evidenceOut: VpsHealthResult["evidence"] = { ...base, memoryUsedPercent: usedPercent };
 
   const reasons: string[] = [];
-  if (usedPercent > MEMORY_USED_PERCENT_DEGRADED_THRESHOLD) {
+  if (rawUsedPercent > MEMORY_USED_PERCENT_DEGRADED_THRESHOLD) {
     reasons.push(`high memory pressure: ${usedPercent}% used (threshold ${MEMORY_USED_PERCENT_DEGRADED_THRESHOLD}%)`);
   }
   if (rawLoadPerCpu > LOAD_PER_CPU_DEGRADED_THRESHOLD) {

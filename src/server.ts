@@ -1,7 +1,8 @@
 /**
  * MCP server for MemoryOS VPS Guardian — public MVP.
  *
- * Registers exactly one tool: engineering.vps.health (read-only, deterministic).
+ * Registers the implemented tools: engineering.vps.health and
+ * engineering.vps.capacity (read-only, deterministic).
  * The AI receives a goal-oriented tool, not a terminal: no shell, no SSH, no LLM,
  * no network access, no secrets, no mutation.
  */
@@ -10,6 +11,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { handleVpsHealth, vpsHealthOutputSchema } from "./tools/vpsHealth";
+import { handleVpsCapacity, vpsCapacityOutputSchema } from "./tools/vpsCapacity";
 import { localSystemHealthAdapter } from "./adapters/systemHealth";
 
 export function buildServer(): McpServer {
@@ -30,6 +32,37 @@ export function buildServer(): McpServer {
     async (args: unknown) => {
       try {
         const result = handleVpsHealth(args, localSystemHealthAdapter);
+        return {
+          structuredContent: result as unknown as Record<string, unknown>,
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            { type: "text" as const, text: error instanceof Error ? error.message : "invalid input" },
+          ],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "engineering.vps.capacity",
+    {
+      title: "VPS capacity",
+      description:
+        "Is my VPS close to its capacity limits? Returns a deterministic read-only " +
+        "pressure assessment (OK | PRESSURED | UNKNOWN) for CPU load and memory, " +
+        "built from local OS evidence only. Current state only — no capacity " +
+        "prediction and no upgrade advice. Input must be exactly {}. " +
+        "No mutation, no shell, no SSH, no network, no secrets.",
+      inputSchema: z.object({}).strict(),
+      outputSchema: vpsCapacityOutputSchema,
+    },
+    async (args: unknown) => {
+      try {
+        const result = handleVpsCapacity(args, localSystemHealthAdapter);
         return {
           structuredContent: result as unknown as Record<string, unknown>,
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],

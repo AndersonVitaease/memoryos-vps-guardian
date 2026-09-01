@@ -67,6 +67,14 @@ describe("assessVpsHealth (deterministic classification)", () => {
     expect(result.status).toBe("DEGRADED");
   });
 
+  it("compares raw memory used percent (rounding is display-only): 90.04% -> DEGRADED, exactly 90% -> HEALTHY", () => {
+    const above = assessVpsHealth({ ...HEALTHY, memoryTotalBytes: 10000, memoryFreeBytes: 996 });
+    expect(above.status).toBe("DEGRADED"); // raw 90.04% used (display rounds to 90.0)
+
+    const at = assessVpsHealth({ ...HEALTHY, memoryTotalBytes: 10000, memoryFreeBytes: 1000 });
+    expect(at.status).toBe("HEALTHY"); // exactly 90% is not "above 90%"
+    expect(at.evidence.memoryUsedPercent).toBe(90);
+  });
   it("returns UNKNOWN when essential evidence is unavailable (no fabricated values)", () => {
     const result = assessVpsHealth({ ...HEALTHY, memoryTotalBytes: null, memoryFreeBytes: null });
     expect(result.status).toBe("UNKNOWN");

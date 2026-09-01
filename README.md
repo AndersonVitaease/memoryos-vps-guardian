@@ -30,20 +30,20 @@ See [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) for the full public securit
 
 ## Initial public Simple Tools catalog (planned v0.1 public tool surface)
 
-The ten tools below define the initial public tool surface. Currently only `engineering.vps.health` is implemented; the remaining nine are planned for the v0.1 surface (see [Available tool](#available-tool) below).
+The ten tools below define the initial public tool surface. Currently two are implemented — `engineering.vps.health` and `engineering.vps.capacity`; the remaining eight are planned for the v0.1 surface (see [Available tools](#available-tools) below).
 
-| # | Tool | Answers |
-|---:|------|---------|
-| 1 | `engineering.vps.health` | Is my VPS healthy? |
-| 2 | `engineering.vps.why_down` | Why is my VPS or application having a problem? |
-| 3 | `engineering.deploy.status` | Is my deployment working? |
-| 4 | `engineering.vps.capacity` | Is my VPS close to its limits? |
-| 5 | `engineering.vps.what_changed` | What changed recently? |
-| 6 | `engineering.app.health` | Is my application working? |
-| 7 | `engineering.vps.incident.summary` | What is happening with my VPS right now? |
-| 8 | `engineering.deploy.ready` | Is it safe to deploy now? |
-| 9 | `engineering.docker.health` | Are my containers healthy? |
-| 10 | `engineering.logs.explain` | What do these errors/logs mean? |
+| # | Tool | Answers | Status |
+|---:|------|---------|--------|
+| 1 | `engineering.vps.health` | Is my VPS healthy? | IMPLEMENTED |
+| 2 | `engineering.vps.why_down` | Why is my VPS or application having a problem? | PLANNED |
+| 3 | `engineering.deploy.status` | Is my deployment working? | PLANNED |
+| 4 | `engineering.vps.capacity` | Is my VPS close to its limits? | IMPLEMENTED |
+| 5 | `engineering.vps.what_changed` | What changed recently? | PLANNED |
+| 6 | `engineering.app.health` | Is my application working? | PLANNED |
+| 7 | `engineering.vps.incident.summary` | What is happening with my VPS right now? | PLANNED |
+| 8 | `engineering.deploy.ready` | Is it safe to deploy now? | PLANNED |
+| 9 | `engineering.docker.health` | Are my containers healthy? | PLANNED |
+| 10 | `engineering.logs.explain` | What do these errors/logs mean? | PLANNED |
 
 ## Security model
 
@@ -57,7 +57,7 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 
 ## Current status
 
-- **First implementation available:** the MCP server ships one implemented tool, `engineering.vps.health` (read-only, deterministic, evidence-based). The other nine tools of the catalog are planned, not implemented.
+- **Two public Simple Tools implemented:** the MCP server ships `engineering.vps.health` and `engineering.vps.capacity` (read-only, deterministic, evidence-based). The other eight tools of the catalog are planned, not implemented.
 - No stable release has been published yet.
 
 ## Planned public roadmap
@@ -106,9 +106,9 @@ Generic example for launching the server from source. Exact syntax varies betwee
 
 Replace `<path-to-memoryos-vps-guardian>` with the local folder where you cloned this repository.
 
-## Available tool
+## Available tools
 
-Only one tool is implemented in this MVP:
+Two tools are implemented in this MVP:
 
 ### `engineering.vps.health`
 
@@ -129,7 +129,35 @@ Evidence collected (read-only, via Node.js `os` APIs — no shell, no SSH, no ne
 - free memory (bytes)
 - memory usage percentage
 
-Nothing beyond this tool (Docker, deployments, logs, capacity, etc.) is implemented yet — the remaining tools are part of the planned catalog above.
+### `engineering.vps.capacity`
+
+Answers: **"Is my VPS close to its limits?"**
+
+**Input:** exactly `{}` — no parameters; extra properties are rejected.
+
+**Output:** a deterministic pressure assessment with a per-component view (CPU, memory) and a global status:
+
+- `OK` — both CPU load and memory usage are below the documented thresholds.
+- `PRESSURED` — clear pressure detected on either component.
+- `UNKNOWN` — essential evidence could not be obtained; no classification is invented.
+
+Current thresholds (raw values are compared; rounding is display-only):
+
+- memory used > 90% → `HIGH`
+- 1-minute load / CPU count > 2 → `HIGH`
+
+Evidence collected (read-only, via the same Node.js `os` APIs — no shell, no SSH, no network):
+
+- CPU count
+- 1-minute load average
+- load per CPU
+- total memory (bytes)
+- free memory (bytes)
+- memory usage percentage
+
+Current state only: the result describes the present snapshot — no future capacity prediction and no automatic upgrade recommendation.
+
+Nothing beyond these two tools (Docker, deployments, logs, etc.) is implemented yet — the remaining eight tools are part of the planned catalog above.
 
 ## Quick validation
 
@@ -140,7 +168,7 @@ npm run typecheck
 npm test
 ```
 
-Expected current state: **11 tests passing**.
+Expected current state: **26 tests passing**.
 
 ## License
 

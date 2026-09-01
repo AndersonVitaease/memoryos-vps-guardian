@@ -30,7 +30,7 @@ See [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) for the full public securit
 
 ## Initial public Simple Tools catalog (planned v0.1 public tool surface)
 
-The ten tools below define the initial public tool surface. Currently two are implemented — `engineering.vps.health` and `engineering.vps.capacity`; the remaining eight are planned for the v0.1 surface (see [Available tools](#available-tools) below).
+The ten tools below define the initial public tool surface. Currently three are implemented — `engineering.vps.health`, `engineering.vps.capacity` and `engineering.vps.what_changed`; the remaining seven are planned for the v0.1 surface (see [Available tools](#available-tools) below).
 
 | # | Tool | Answers | Status |
 |---:|------|---------|--------|
@@ -38,7 +38,7 @@ The ten tools below define the initial public tool surface. Currently two are im
 | 2 | `engineering.vps.why_down` | Why is my VPS or application having a problem? | PLANNED |
 | 3 | `engineering.deploy.status` | Is my deployment working? | PLANNED |
 | 4 | `engineering.vps.capacity` | Is my VPS close to its limits? | IMPLEMENTED |
-| 5 | `engineering.vps.what_changed` | What changed recently? | PLANNED |
+| 5 | `engineering.vps.what_changed` | What changed recently? | IMPLEMENTED |
 | 6 | `engineering.app.health` | Is my application working? | PLANNED |
 | 7 | `engineering.vps.incident.summary` | What is happening with my VPS right now? | PLANNED |
 | 8 | `engineering.deploy.ready` | Is it safe to deploy now? | PLANNED |
@@ -57,7 +57,7 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 
 ## Current status
 
-- **Two public Simple Tools implemented:** the MCP server ships `engineering.vps.health` and `engineering.vps.capacity` (read-only, deterministic, evidence-based). The other eight tools of the catalog are planned, not implemented.
+- **Three public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity` and `engineering.vps.what_changed` (read-only, deterministic, evidence-based). Note: `what_changed` is session-scoped — it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. The other seven tools of the catalog are planned, not implemented.
 - No stable release has been published yet.
 
 ## Planned public roadmap
@@ -108,7 +108,7 @@ Replace `<path-to-memoryos-vps-guardian>` with the local folder where you cloned
 
 ## Available tools
 
-Two tools are implemented in this MVP:
+Three tools are implemented in this MVP:
 
 ### `engineering.vps.health`
 
@@ -157,7 +157,31 @@ Evidence collected (read-only, via the same Node.js `os` APIs — no shell, no S
 
 Current state only: the result describes the present snapshot — no future capacity prediction and no automatic upgrade recommendation.
 
-Nothing beyond these two tools (Docker, deployments, logs, etc.) is implemented yet — the remaining eight tools are part of the planned catalog above.
+### `engineering.vps.what_changed`
+
+Answers: **"What changed since the previous observation made by this MCP process?"**
+
+**Important — session scope:** this tool has no historical visibility of the VPS. It keeps its baseline and last observation only in the memory of the running MCP server process. The first call creates the baseline and restarting the server resets all history. It does **not** provide deployment, file, service, container, configuration or user-action history, and never infers one.
+
+**Input:** exactly `{}` — no parameters; extra properties are rejected.
+
+**Output:** a deterministic status plus the observed changes:
+
+- `BASELINE_CREATED` — first observation of this process; nothing could be compared yet (`changes` is empty). The tool never claims any knowledge from before this baseline.
+- `CHANGED` — one or more observed differences above the documented thresholds since the previous observation of this process.
+- `NO_CHANGE` — no observed evidence changed above the thresholds since the previous observation of this process. This does **not** mean nothing changed on the VPS outside the evidence this tool observes.
+- `UNKNOWN` — essential evidence was unavailable or inconsistent (including a change of total memory between observations); nothing is fabricated and the previous observation is kept for the next comparison.
+
+Significance thresholds (raw values are compared; rounding is display-only):
+
+- CPU count differs → `cpuCount` change
+- uptime decreased → `reboot` change (factual only; no cause is claimed)
+- free memory changed by more than 1% of total memory → `memory` change
+- 1-minute load per CPU changed by more than 0.5 → `cpu` change
+
+Each reported change carries a factual `description` plus real `before`/`after` values. `observationsSinceBaseline` counts the successful observations of this process (first call = 1, second = 2, and so on), and `baselineCapturedAt` is the ISO UTC timestamp of the session's first successful observation.
+
+Nothing beyond these three tools (Docker, deployments, logs, etc.) is implemented yet — the remaining seven tools are part of the planned catalog above.
 
 ## Quick validation
 
@@ -168,7 +192,7 @@ npm run typecheck
 npm test
 ```
 
-Expected current state: **26 tests passing**.
+Expected current state: **52 tests passing**.
 
 ## License
 

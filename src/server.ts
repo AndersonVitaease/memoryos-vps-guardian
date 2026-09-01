@@ -2,9 +2,11 @@
  * MCP server for MemoryOS VPS Guardian — public MVP.
  *
  * Registers the implemented tools: engineering.vps.health,
- * engineering.vps.capacity and engineering.vps.what_changed (read-only,
- * deterministic). The what_changed instance is created per buildServer() call:
- * its baseline and last observation live only in the memory of this process.
+ * engineering.vps.capacity, engineering.vps.what_changed and
+ * engineering.vps.incident.summary (read-only, deterministic). The
+ * what_changed instance is created per buildServer() call and shared with the
+ * incident summary composition: its baseline and last observation live only
+ * in the memory of this process.
  * The AI receives a goal-oriented tool, not a terminal: no shell, no SSH, no LLM,
  * no network access, no secrets, no mutation.
  */
@@ -15,6 +17,7 @@ import { z } from "zod";
 import { handleVpsHealth, vpsHealthOutputSchema } from "./tools/vpsHealth";
 import { handleVpsCapacity, vpsCapacityOutputSchema } from "./tools/vpsCapacity";
 import { createVpsWhatChangedTool, vpsWhatChangedOutputSchema } from "./tools/vpsWhatChanged";
+import { createVpsIncidentSummaryTool, vpsIncidentSummaryOutputSchema } from "./tools/vpsIncidentSummary";
 import { localSystemHealthAdapter } from "./adapters/systemHealth";
 
 export function buildServer(): McpServer {
@@ -104,6 +107,48 @@ export function buildServer(): McpServer {
     async (args: unknown) => {
       try {
         const result = whatChangedTool.handle(args);
+        return {
+          structuredContent: result as unknown as Record<string, unknown>,
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            { type: "text" as const, text: error instanceof Error ? error.message : "invalid input" },
+          ],
+        };
+      }
+    },
+  );
+
+  // Deterministic composition: ONE adapter snapshot for health+capacity and the
+  // SAME session-scoped what_changed instance/history as above. This tool call
+  // counts as one what_changed observation (documented semantics).
+  const incidentSummaryTool = createVpsIncidentSummaryTool(
+    localSystemHealthAdapter,
+    whatChangedTool,
+  );
+
+  server.registerTool(
+    "engineering.vps.incident.summary",
+    {
+      title: "VPS incident summary",
+      description:
+        "Deterministic composition summary: what is happening on this VPS right now " +
+        "according to the local evidence observed by this MCP process? Combines the " +
+        "current health, capacity and change observations. It shares the session " +
+        "history of engineering.vps.what_changed: calling this tool counts as one " +
+        "observation. Returns NORMAL, ATTENTION or UNKNOWN with compact factual " +
+        "notes and fixed limitations. It never claims a root cause and does NOT " +
+        "observe applications, services, containers, deployments or logs. " +
+        "Input must be exactly {}. No mutation, no shell, no SSH, no network, no secrets.",
+      inputSchema: z.object({}).strict(),
+      outputSchema: vpsIncidentSummaryOutputSchema,
+    },
+    async (args: unknown) => {
+      try {
+        const result = incidentSummaryTool.handle(args);
         return {
           structuredContent: result as unknown as Record<string, unknown>,
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],

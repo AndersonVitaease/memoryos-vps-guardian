@@ -138,8 +138,8 @@ describe("strict empty input (function boundary)", () => {
   });
 });
 
-describe("MCP server (three tools)", () => {
-  it("registers exactly the three implemented tools, all strict-empty", async () => {
+describe("MCP server (four tools)", () => {
+  it("registers exactly the four implemented tools, all strict-empty", async () => {
     const server = buildServer();
     const client = new Client({ name: "list-client", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -150,6 +150,7 @@ describe("MCP server (three tools)", () => {
       expect(names).toEqual([
         "engineering.vps.capacity",
         "engineering.vps.health",
+        "engineering.vps.incident.summary",
         "engineering.vps.what_changed",
       ]);
       for (const tool of listed.tools) {

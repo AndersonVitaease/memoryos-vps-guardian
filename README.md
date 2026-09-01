@@ -30,7 +30,7 @@ See [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) for the full public securit
 
 ## Initial public Simple Tools catalog (planned v0.1 public tool surface)
 
-The ten tools below define the initial public tool surface. Currently three are implemented — `engineering.vps.health`, `engineering.vps.capacity` and `engineering.vps.what_changed`; the remaining seven are planned for the v0.1 surface (see [Available tools](#available-tools) below).
+The ten tools below define the initial public tool surface. Currently four are implemented — `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed` and `engineering.vps.incident.summary`; the remaining six are planned for the v0.1 surface (see [Available tools](#available-tools) below).
 
 | # | Tool | Answers | Status |
 |---:|------|---------|--------|
@@ -40,7 +40,7 @@ The ten tools below define the initial public tool surface. Currently three are 
 | 4 | `engineering.vps.capacity` | Is my VPS close to its limits? | IMPLEMENTED |
 | 5 | `engineering.vps.what_changed` | What changed recently? | IMPLEMENTED |
 | 6 | `engineering.app.health` | Is my application working? | PLANNED |
-| 7 | `engineering.vps.incident.summary` | What is happening with my VPS right now? | PLANNED |
+| 7 | `engineering.vps.incident.summary` | What is happening with my VPS right now? | IMPLEMENTED |
 | 8 | `engineering.deploy.ready` | Is it safe to deploy now? | PLANNED |
 | 9 | `engineering.docker.health` | Are my containers healthy? | PLANNED |
 | 10 | `engineering.logs.explain` | What do these errors/logs mean? | PLANNED |
@@ -57,7 +57,7 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 
 ## Current status
 
-- **Three public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity` and `engineering.vps.what_changed` (read-only, deterministic, evidence-based). Note: `what_changed` is session-scoped — it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. The other seven tools of the catalog are planned, not implemented.
+- **Four public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed` and `engineering.vps.incident.summary` (read-only, deterministic, evidence-based). `what_changed` is session-scoped — it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. `incident.summary` is a deterministic composition over the same evidence: it reports NORMAL, ATTENTION or UNKNOWN, never a root cause, and calling it counts as one shared change observation. The other six tools of the catalog are planned, not implemented.
 - No stable release has been published yet.
 
 ## Planned public roadmap
@@ -108,7 +108,7 @@ Replace `<path-to-memoryos-vps-guardian>` with the local folder where you cloned
 
 ## Available tools
 
-Three tools are implemented in this MVP:
+Four tools are implemented in this MVP:
 
 ### `engineering.vps.health`
 
@@ -181,7 +181,23 @@ Significance thresholds (raw values are compared; rounding is display-only):
 
 Each reported change carries a factual `description` plus real `before`/`after` values. `observationsSinceBaseline` counts the successful observations of this process (first call = 1, second = 2, and so on), and `baselineCapturedAt` is the ISO UTC timestamp of the session's first successful observation.
 
-Nothing beyond these three tools (Docker, deployments, logs, etc.) is implemented yet — the remaining seven tools are part of the planned catalog above.
+### `engineering.vps.incident.summary`
+
+Answers: **"What is happening on this VPS right now, according to local evidence?"** — a deterministic composition of the three tools above, not a new evidence source.
+
+**Input:** exactly `{}` — no parameters; extra properties are rejected.
+
+**Output:** a single deterministic verdict plus compact observations:
+
+- `NORMAL` — health HEALTHY, capacity OK and no significant change observed (or the change-observation baseline was just created). A freshly created baseline is never treated as an incident or as proof of past stability.
+- `ATTENTION` — one or more currently observed conditions require attention: health DEGRADED, capacity PRESSURED or a significant change observed. This is not a confirmed incident, outage or failure and never names a cause.
+- `UNKNOWN` — some required evidence was unavailable or inconsistent; absence of evidence is never reported as NORMAL or ATTENTION.
+
+`observations` contains exactly one factual note per component (`engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed`) and `limitations` is a fixed deterministic list: no causal conclusion is made; applications, services, containers, deployments and logs are not observed; change observation is scoped to this MCP process/session and facts before its baseline are unknown.
+
+**Shared change history:** this tool uses the same session-scoped `what_changed` instance, so calling `engineering.vps.incident.summary` counts as one change observation — direct `engineering.vps.what_changed` calls and summary calls advance the same sequence.
+
+Nothing beyond these four tools (Docker, deployments, logs, etc.) is implemented yet — the remaining six tools are part of the planned catalog above.
 
 ## Quick validation
 
@@ -192,7 +208,7 @@ npm run typecheck
 npm test
 ```
 
-Expected current state: **52 tests passing**.
+Expected current state: **66 tests passing**.
 
 ## License
 

@@ -30,7 +30,7 @@ See [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) for the full public securit
 
 ## Initial public Simple Tools catalog (planned v0.1 public tool surface)
 
-The ten tools below define the initial public tool surface. This repository is currently at the foundation stage: this catalog describes the target v0.1 surface, not a shipped implementation.
+The ten tools below define the initial public tool surface. Currently only `engineering.vps.health` is implemented; the remaining nine are planned for the v0.1 surface (see [Available tool](#available-tool) below).
 
 | # | Tool | Answers |
 |---:|------|---------|
@@ -57,8 +57,7 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 
 ## Current status
 
-- **Foundation stage.** This repository currently contains public documentation, license and project baseline only.
-- No functional tool implementation is included yet.
+- **First implementation available:** the MCP server ships one implemented tool, `engineering.vps.health` (read-only, deterministic, evidence-based). The other nine tools of the catalog are planned, not implemented.
 - No stable release has been published yet.
 
 ## Planned public roadmap
@@ -67,6 +66,81 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 2. **Safe adapter contracts:** narrow interfaces, as needed, that let the public tools connect to a user's own deployment/monitoring mechanisms.
 3. **Documentation-driven hardening:** security-model checks, validation guidance and example configurations.
 4. **Possible public equivalents of selected private capabilities:** evaluated per item, without roadmap commitment (see [docs/PUBLIC-SCOPE.md](docs/PUBLIC-SCOPE.md)).
+
+## Requirements
+
+- [Node.js](https://nodejs.org) **18 or newer** — the minimum declared in `package.json` (`engines.node: ">=18"`). Only this floor is guaranteed by the project; no other specific versions are claimed as tested.
+- npm (bundled with Node.js) to install dependencies from the public npm registry.
+
+## Install from source
+
+```bash
+git clone https://github.com/AndersonVitaease/memoryos-vps-guardian.git
+cd memoryos-vps-guardian
+npm install
+```
+
+## Run
+
+```bash
+npm start
+```
+
+The server runs over **MCP stdio**: it is started by the client process and communicates exclusively via standard input/output. There is no HTTP server and no network listener.
+
+## MCP client configuration
+
+Generic example for launching the server from source. Exact syntax varies between MCP clients — most accept a command, arguments and a working directory in some form:
+
+```json
+{
+  "mcpServers": {
+    "memoryos-vps-guardian": {
+      "command": "npm",
+      "args": ["start"],
+      "cwd": "<path-to-memoryos-vps-guardian>"
+    }
+  }
+}
+```
+
+Replace `<path-to-memoryos-vps-guardian>` with the local folder where you cloned this repository.
+
+## Available tool
+
+Only one tool is implemented in this MVP:
+
+### `engineering.vps.health`
+
+**Input:** exactly `{}` — no parameters; extra properties are rejected.
+
+**Output:** a deterministic status plus supporting evidence:
+
+- `HEALTHY` — memory usage and 1-minute load per CPU are below the documented thresholds.
+- `DEGRADED` — clear pressure detected: memory usage above 90%, or 1-minute load above 2× the CPU count.
+- `UNKNOWN` — essential evidence could not be obtained; no diagnosis is invented.
+
+Evidence collected (read-only, via Node.js `os` APIs — no shell, no SSH, no network):
+
+- uptime (seconds)
+- CPU count
+- 1-minute load average
+- total memory (bytes)
+- free memory (bytes)
+- memory usage percentage
+
+Nothing beyond this tool (Docker, deployments, logs, capacity, etc.) is implemented yet — the remaining tools are part of the planned catalog above.
+
+## Quick validation
+
+From the repository root:
+
+```bash
+npm run typecheck
+npm test
+```
+
+Expected current state: **11 tests passing**.
 
 ## License
 

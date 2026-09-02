@@ -57,7 +57,7 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 
 ## Current status
 
-- **Four public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed` and `engineering.vps.incident.summary` (read-only, deterministic, evidence-based). `what_changed` is session-scoped — it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. `incident.summary` is a deterministic composition over the same evidence: it reports NORMAL, ATTENTION or UNKNOWN, never a root cause, and calling it counts as one shared change observation. The other six tools of the catalog are planned, not implemented.
+- **Four public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed` and `engineering.vps.incident.summary` (read-only, deterministic, evidence-based). `what_changed` is session-scoped — it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. `incident.summary` is a deterministic composition over the same evidence: it reports NORMAL, ATTENTION or UNKNOWN, never a root cause, and calling it counts as one shared change observation. The other six tools of the catalog are planned, not implemented. The application/deployment safe adapter contract (typed evidence, strict validation and pure classifiers — see [Safe adapter contract](#safe-adapter-contract-applicationdeployment-evidence) below) is implemented as a code-level seam, with no transport and no new MCP tools.
 - No stable release has been published yet.
 
 ## Planned public roadmap
@@ -198,6 +198,17 @@ Answers: **"What is happening on this VPS right now, according to local evidence
 **Shared change history:** this tool uses the same session-scoped `what_changed` instance, so calling `engineering.vps.incident.summary` counts as one change observation — direct `engineering.vps.what_changed` calls and summary calls advance the same sequence.
 
 Nothing beyond these four tools (Docker, deployments, logs, etc.) is implemented yet — the remaining six tools are part of the planned catalog above.
+
+## Safe adapter contract (application/deployment evidence)
+
+The code-level seam for the planned application/deployment tools (`engineering.deploy.status`, `engineering.app.health`, `engineering.deploy.ready`) is implemented, following the same injectable pattern as the host evidence adapter:
+
+- `ApplicationDeploymentEvidence` — one typed evidence snapshot (`applicationId`, `observedAt`, `source`, `currentReleaseId`, `previousReleaseId`, `deploymentStatus`, `lastDeploymentFinishedAt`, `applicationHealthy`), where every nullable field means "the evidence source cannot observe this".
+- `applicationDeploymentEvidenceSchema` with `parseApplicationDeploymentEvidence` / `tryParseApplicationDeploymentEvidence` — strict zod validation: unknown keys rejected, bounded strings, no control characters, ISO-8601 UTC timestamps only, and `lastDeploymentFinishedAt` must not be after `observedAt`. Malformed or inconsistent evidence is never repaired or guessed.
+- `ApplicationDeploymentAdapter { name, collect(): evidence | null }` — a pure, side-effect-free, read-only evidence seam analogous to `SystemHealthAdapter`.
+- Pure deterministic classifiers `assessApplicationHealth` (`true/false/null` → `HEALTHY/DEGRADED/UNKNOWN`), `assessDeployStatus` (`SUCCEEDED/IN_PROGRESS/QUEUED/FAILED/null` → `OK/IN_FLIGHT/PENDING/FAILED/UNKNOWN`) and `assessDeployReady` (advisory only: `READY` requires no in-flight/queued deployment, a reported-healthy application, no VPS health DEGRADED, no VPS capacity PRESSURED, and no required component UNKNOWN; it triggers nothing and grants no deployment authority).
+
+**No transport ships with this contract.** It performs no file, socket, container-runtime, environment or credential access of any kind, and no new MCP tool is registered (the public catalog remains the four tools above). Evidence authority stays with the host process that constructs the server; MCP tool arguments never carry this evidence. Missing evidence maps deterministically to `UNKNOWN`/`UNAVAILABLE` and is never inferred.
 
 ## Quick validation
 

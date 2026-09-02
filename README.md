@@ -30,13 +30,13 @@ See [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) for the full public securit
 
 ## Initial public Simple Tools catalog (planned v0.1 public tool surface)
 
-The ten tools below define the initial public tool surface. Currently four are implemented — `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed` and `engineering.vps.incident.summary`; the remaining six are planned for the v0.1 surface (see [Available tools](#available-tools) below).
+The ten tools below define the initial public tool surface. Currently five are implemented — `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed`, `engineering.vps.incident.summary` and `engineering.deploy.status`; the remaining five are planned for the v0.1 surface (see [Available tools](#available-tools) below).
 
 | # | Tool | Answers | Status |
 |---:|------|---------|--------|
 | 1 | `engineering.vps.health` | Is my VPS healthy? | IMPLEMENTED |
 | 2 | `engineering.vps.why_down` | Why is my VPS or application having a problem? | PLANNED |
-| 3 | `engineering.deploy.status` | Is my deployment working? | PLANNED |
+| 3 | `engineering.deploy.status` | Is my deployment working? | IMPLEMENTED |
 | 4 | `engineering.vps.capacity` | Is my VPS close to its limits? | IMPLEMENTED |
 | 5 | `engineering.vps.what_changed` | What changed recently? | IMPLEMENTED |
 | 6 | `engineering.app.health` | Is my application working? | PLANNED |
@@ -57,7 +57,7 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 
 ## Current status
 
-- **Four public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed` and `engineering.vps.incident.summary` (read-only, deterministic, evidence-based). `what_changed` is session-scoped — it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. `incident.summary` is a deterministic composition over the same evidence: it reports NORMAL, ATTENTION or UNKNOWN, never a root cause, and calling it counts as one shared change observation. The other six tools of the catalog are planned, not implemented. The application/deployment safe adapter contract (typed evidence, strict validation and pure classifiers — see [Safe adapter contract](#safe-adapter-contract-applicationdeployment-evidence) below) is implemented as a code-level seam, with no transport and no new MCP tools.
+- **Five public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed`, `engineering.vps.incident.summary` and `engineering.deploy.status` (read-only, deterministic, evidence-based). `what_changed` is session-scoped — it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. `incident.summary` is a deterministic composition over the same evidence: it reports NORMAL, ATTENTION or UNKNOWN, never a root cause, and calling it counts as one shared change observation. `deploy.status` reports the deployment state from the operator-configured release-state evidence source (see [Available tools](#available-tools) below); without configuration it truthfully reports UNAVAILABLE. The other five tools of the catalog are planned, not implemented. The application/deployment safe adapter contract (typed evidence, strict validation and pure classifiers — see [Safe adapter contract](#safe-adapter-contract-applicationdeployment-evidence) below) is implemented as a code-level seam, with the release-state file transport as its first evidence source.
 - No stable release has been published yet.
 
 ## Planned public roadmap
@@ -108,7 +108,7 @@ Replace `<path-to-memoryos-vps-guardian>` with the local folder where you cloned
 
 ## Available tools
 
-Four tools are implemented in this MVP:
+Five tools are implemented in this MVP:
 
 ### `engineering.vps.health`
 
@@ -197,7 +197,17 @@ Answers: **"What is happening on this VPS right now, according to local evidence
 
 **Shared change history:** this tool uses the same session-scoped `what_changed` instance, so calling `engineering.vps.incident.summary` counts as one change observation — direct `engineering.vps.what_changed` calls and summary calls advance the same sequence.
 
-Nothing beyond these four tools (Docker, deployments, logs, etc.) is implemented yet — the remaining six tools are part of the planned catalog above.
+Nothing beyond these five tools (application health, Docker, logs, etc.) is implemented yet — the remaining five tools are part of the planned catalog above.
+
+### `engineering.deploy.status`
+
+**Question answered:** what deployment state is reported by the configured application/deployment evidence source? Returns a deterministic read-only verdict: `OK` (source reports SUCCEEDED), `IN_FLIGHT` (IN_PROGRESS), `PENDING` (QUEUED), `FAILED` (FAILED), `UNKNOWN` (a valid source explicitly reported no deployment status) or `UNAVAILABLE` (no source is configured, or the configured source returned no valid evidence).
+
+**Configuration (optional, operator-controlled):** set `MEMORYOS_VPS_GUARDIAN_RELEASE_STATE_FILE` to the path of one local JSON release-state file (the [ReleaseStateFileAdapter](#release-state-file-transport-releasestatefileadapter) format) when launching the server. The variable is read once at startup by the host process; it is never caller-controlled, never echoed, and no MCP argument can supply or change the path. Without it the tool remains registered and truthfully answers UNAVAILABLE.
+
+**Output:** `status`, `summary`, `applicationId`, `source`, `observedAt`, `currentReleaseId`, `lastDeploymentFinishedAt`, `evidenceAgeSeconds` and a fixed `limitations` list. With no valid evidence all evidence-derived fields are `null` — nothing is invented. `evidenceAgeSeconds` is the factual age of the evidence (`floor((now − observedAt) / 1000)`); it never changes the verdict, and a negative value means observable clock skew. The configured file path, file contents and any filesystem/validation errors are never exposed.
+
+**Scope:** this tool does not assess application health, VPS health, readiness to deploy, rollback suitability, failure root cause or change safety.
 
 ## Safe adapter contract (application/deployment evidence)
 
@@ -208,7 +218,7 @@ The code-level seam for the planned application/deployment tools (`engineering.d
 - `ApplicationDeploymentAdapter { name, collect(): evidence | null }` — a pure, side-effect-free, read-only evidence seam analogous to `SystemHealthAdapter`.
 - Pure deterministic classifiers `assessApplicationHealth` (`true/false/null` → `HEALTHY/DEGRADED/UNKNOWN`), `assessDeployStatus` (`SUCCEEDED/IN_PROGRESS/QUEUED/FAILED/null` → `OK/IN_FLIGHT/PENDING/FAILED/UNKNOWN`) and `assessDeployReady` (advisory only: `READY` requires no in-flight/queued deployment, a reported-healthy application, no VPS health DEGRADED, no VPS capacity PRESSURED, and no required component UNKNOWN; it triggers nothing and grants no deployment authority).
 
-**No transport ships with this contract.** It performs no file, socket, container-runtime, environment or credential access of any kind, and no new MCP tool is registered (the public catalog remains the four tools above). Evidence authority stays with the host process that constructs the server; MCP tool arguments never carry this evidence. Missing evidence maps deterministically to `UNKNOWN`/`UNAVAILABLE` and is never inferred.
+**No transport ships with this contract.** It performs no file, socket, container-runtime, environment or credential access of any kind. Evidence authority stays with the host process that constructs the server; MCP tool arguments never carry this evidence. Missing evidence maps deterministically to `UNKNOWN`/`UNAVAILABLE` and is never inferred. Its first consuming MCP tool is `engineering.deploy.status` (see above); the other planned consumers (`engineering.app.health`, `engineering.deploy.ready`) are not registered yet.
 
 ## Release-state file transport (ReleaseStateFileAdapter)
 
@@ -218,7 +228,7 @@ The code-level seam for the planned application/deployment tools (`engineering.d
 - **Read-only, no generic filesystem access.** The only I/O is `statSync()` + `readFileSync()` against that one absolute path — no writes, renames, deletes, directory listing, globs, watchers, polling, streams, retries, caching, or environment access, and no generic filesystem layer.
 - **64 KiB hard limit** (`MAX_RELEASE_STATE_BYTES = 65536`), enforced before reading (via `stat`) and re-checked after reading.
 - **Fail-closed.** A missing file, permission denied, directory/non-regular file, oversized file, empty or malformed JSON, or evidence failing the strict contract schema all map deterministically to `null` (→ `UNAVAILABLE`), never a crash, a guessed status, or partially accepted evidence. No staleness is computed here and no clock is used: `observedAt` passes through exactly as validated, and staleness display/policy belongs to the consuming MCP tool.
-- **No MCP tool registers or consumes it yet**; the public catalog remains the four tools above.
+- **Consumed by `engineering.deploy.status`** (the other planned consumers `engineering.app.health` and `engineering.deploy.ready` are not registered yet); the rest of the public catalog is unaffected and works with zero configuration.
 - **Producer recommendation:** write a temporary file, then atomically rename it over the configured path, so readers never observe a partial write (a partial write anyway fails closed).
 
 ## Quick validation

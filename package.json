@@ -2,7 +2,7 @@
   "name": "memoryos-vps-guardian",
   "version": "0.1.0",
   "private": true,
-  "description": "Safe, read-only MCP server for VPS operational evidence: health, capacity, change observation, incident summary, deployment state, application health and deployment readiness.",
+  "description": "Safe, read-only MCP server for VPS operational evidence: health, capacity, change observation, incident summary, deployment state, application health, deployment readiness, Docker container health, why-down signal synthesis and log signal explanations.",
   "keywords": [
     "mcp",
     "mcp-server",

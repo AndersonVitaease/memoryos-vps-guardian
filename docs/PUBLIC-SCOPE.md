@@ -5,7 +5,7 @@ This document defines what MemoryOS VPS Guardian includes in the public v0.1 sco
 ## PUBLIC — v0.1
 
 - **MCP server/package foundation** — the installable package skeleton and MCP entry point.
-- **Ten Simple Tools** — the public tool surface listed in the README (`engineering.vps.*`, `engineering.app.health`, `engineering.deploy.*`, `engineering.logs.explain`).
+- **Ten Simple Tools** — the public tool surface listed in the README (`engineering.vps.*`, `engineering.app.health`, `engineering.deploy.*`, `engineering.logs.explain`). Each tool has a dedicated documentation page under [`docs/tools/`](tools/).
 - **Public schemas/types** — input/output contracts for the public tools.
 - **Public documentation** — security model, scope, usage and operational guidance.
 - **Examples** — configuration and example sessions demonstrating safe usage.

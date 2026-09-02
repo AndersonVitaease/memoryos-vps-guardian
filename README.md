@@ -1,12 +1,12 @@
 # MemoryOS VPS Guardian
 
-> Safe AI-powered VPS management through MCP.
+> Give AI responsibility for your VPS — not unrestricted shell access.
 
-Open-source MCP tools for VPS health, diagnostics, Docker visibility, deployment readiness, incident explanation and safe server operations — designed so AI agents do not need unrestricted SSH or shell access.
+Open-source, read-only MCP tools for VPS health, capacity, change observation, incident summary, deployment state, application health, deployment readiness, Docker container health, why-down signal synthesis and log signal explanations — designed so AI agents do not need unrestricted SSH or shell access.
 
 ## What is MemoryOS VPS Guardian?
 
-MemoryOS VPS Guardian defines a planned public MCP (Model Context Protocol) tool surface for observing and understanding server state. Instead of handing an AI agent a raw shell, it exposes goal-oriented tools that return structured, evidence-based answers to practical operational questions such as:
+MemoryOS VPS Guardian is a public MCP (Model Context Protocol) server for observing and understanding server state. Instead of handing an AI agent a raw shell, it exposes goal-oriented tools that return structured, evidence-based answers to practical operational questions such as:
 
 - Is my application healthy?
 - Is my VPS healthy?
@@ -14,6 +14,8 @@ MemoryOS VPS Guardian defines a planned public MCP (Model Context Protocol) tool
 - Is my deployment working?
 - Is it safe to deploy right now?
 - What changed recently?
+- Are my containers healthy?
+- What do these log errors mean?
 
 ## Why it exists
 
@@ -22,28 +24,27 @@ AI agents are increasingly used to operate infrastructure. Giving them unrestric
 ## Key principle: goal-oriented safe tools instead of unrestricted shell
 
 - Each tool answers one specific operational goal, not arbitrary power.
-- Read-only behavior is the default wherever possible.
-- Mutation paths, where they exist, are explicit, allowlisted and gated behind confirmation boundaries.
+- All ten public Simple Tools are read-only; no mutation path exists in the current public tool set, and any future mutation path would be explicit, allowlisted and validated.
 - Deterministic evidence comes first; interpretation is layered on top and must never fabricate findings.
 
 See [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) for the full public security model.
 
-## Initial public Simple Tools catalog (planned v0.1 public tool surface)
+## Public Simple Tools catalog
 
-The ten tools below define the initial public tool surface. Currently ten are implemented — `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed`, `engineering.vps.incident.summary`, `engineering.deploy.status`, `engineering.app.health`, `engineering.deploy.ready`, `engineering.docker.health`, `engineering.vps.why_down` and `engineering.logs.explain` (see [Available tools](#available-tools) below).
+The ten tools below are implemented, registered unconditionally in the MCP server, and documented individually under [docs/tools/](docs/tools/).
 
-| # | Tool | Answers | Status |
-|---:|------|---------|--------|
-| 1 | `engineering.vps.health` | Is my VPS healthy? | IMPLEMENTED |
-| 2 | `engineering.vps.why_down` | Why is my VPS or application having a problem? | IMPLEMENTED |
-| 3 | `engineering.deploy.status` | Is my deployment working? | IMPLEMENTED |
-| 4 | `engineering.vps.capacity` | Is my VPS close to its limits? | IMPLEMENTED |
-| 5 | `engineering.vps.what_changed` | What changed recently? | IMPLEMENTED |
-| 6 | `engineering.app.health` | What application health state is reported? | IMPLEMENTED |
-| 7 | `engineering.vps.incident.summary` | What is happening with my VPS right now? | IMPLEMENTED |
-| 8 | `engineering.deploy.ready` | Are the minimum deterministic deployment prerequisites currently met? | IMPLEMENTED |
-| 9 | `engineering.docker.health` | Are my containers healthy? | IMPLEMENTED |
-| 10 | `engineering.logs.explain` | What do these errors/logs mean? | IMPLEMENTED |
+| # | Tool | Answers |
+|---:|------|---------|
+| 1 | [`engineering.vps.health`](docs/tools/vps-health.md) | Is my VPS healthy? |
+| 2 | [`engineering.vps.why_down`](docs/tools/vps-why-down.md) | Why is my VPS or application having a problem? |
+| 3 | [`engineering.deploy.status`](docs/tools/deploy-status.md) | Is my deployment working? |
+| 4 | [`engineering.vps.capacity`](docs/tools/vps-capacity.md) | Is my VPS close to its limits? |
+| 5 | [`engineering.vps.what_changed`](docs/tools/vps-what-changed.md) | What changed recently? |
+| 6 | [`engineering.app.health`](docs/tools/app-health.md) | What application health state is reported? |
+| 7 | [`engineering.vps.incident.summary`](docs/tools/vps-incident-summary.md) | What is happening with my VPS right now? |
+| 8 | [`engineering.deploy.ready`](docs/tools/deploy-ready.md) | Are the minimum deterministic deployment prerequisites currently met? |
+| 9 | [`engineering.docker.health`](docs/tools/docker-health.md) | Are my containers healthy? |
+| 10 | [`engineering.logs.explain`](docs/tools/logs-explain.md) | What do these errors/logs mean? |
 
 ## Security model
 
@@ -62,7 +63,7 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 
 ## Planned public roadmap
 
-1. **v0.1 — public foundation:** MCP server/package foundation, the ten Simple Tools above, public schemas/types, public documentation, examples and installation/configuration guidance.
+1. **v0.1 — public foundation:** MCP server/package foundation, the ten Simple Tools, public schemas/types and public documentation — implemented. Packaging, examples and release mechanics remain for the v0.1 release cycle.
 2. **Safe adapter contracts:** narrow interfaces, as needed, that let the public tools connect to a user's own deployment/monitoring mechanisms.
 3. **Documentation-driven hardening:** security-model checks, validation guidance and example configurations.
 4. **Possible public equivalents of selected private capabilities:** evaluated per item, without roadmap commitment (see [docs/PUBLIC-SCOPE.md](docs/PUBLIC-SCOPE.md)).
@@ -296,7 +297,7 @@ npm run typecheck
 npm test
 ```
 
-Expected current state: **66 tests passing**.
+Expected current state: **320 tests passing** across 12 test files.
 
 ## License
 

@@ -352,7 +352,7 @@ describe("exact output contract", () => {
 });
 
 describe("MCP server integration", () => {
-  it("lists exactly the six public tools", async () => {
+  it("lists exactly the seven public tools", async () => {
     const server = buildServer();
     const client = new Client({ name: "smoke-client", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -362,6 +362,7 @@ describe("MCP server integration", () => {
       expect([...listed.tools].map((t) => t.name).sort()).toEqual(
         [
           "engineering.app.health",
+          "engineering.deploy.ready",
           "engineering.deploy.status",
           "engineering.vps.capacity",
           "engineering.vps.health",

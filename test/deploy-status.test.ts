@@ -305,6 +305,7 @@ describe("MCP server integration", () => {
       expect([...listed.tools].map((t) => t.name).sort()).toEqual(
         [
           "engineering.app.health",
+          "engineering.deploy.ready",
           "engineering.deploy.status",
           "engineering.vps.capacity",
           "engineering.vps.health",

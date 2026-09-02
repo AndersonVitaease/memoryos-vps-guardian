@@ -341,6 +341,7 @@ describe("MCP server (four tools)", () => {
       const names = listed.tools.map((t) => t.name).sort();
       expect(names).toEqual([
         "engineering.app.health",
+        "engineering.deploy.ready",
         "engineering.deploy.status",
         "engineering.vps.capacity",
         "engineering.vps.health",

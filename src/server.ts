@@ -3,8 +3,9 @@
  *
  * Registers the implemented tools: engineering.vps.health,
  * engineering.vps.capacity, engineering.vps.what_changed,
- * engineering.vps.incident.summary, engineering.deploy.status and
- * engineering.app.health (read-only, deterministic). The
+ * engineering.vps.incident.summary, engineering.deploy.status,
+ * engineering.app.health and engineering.deploy.ready (read-only,
+ * deterministic). The
  * what_changed instance is created per buildServer() call and shared with the
  * incident summary composition: its baseline and last observation live only
  * in the memory of this process.
@@ -21,6 +22,7 @@ import { createVpsWhatChangedTool, vpsWhatChangedOutputSchema } from "./tools/vp
 import { createVpsIncidentSummaryTool, vpsIncidentSummaryOutputSchema } from "./tools/vpsIncidentSummary";
 import { handleDeployStatus, deployStatusOutputSchema } from "./tools/deployStatus";
 import { handleAppHealth, appHealthOutputSchema } from "./tools/appHealth";
+import { handleDeployReady, deployReadyOutputSchema } from "./tools/deployReady";
 import { localSystemHealthAdapter } from "./adapters/systemHealth";
 import { createReleaseStateFileAdapter } from "./adapters/releaseStateFile";
 import type { ApplicationDeploymentAdapter } from "./adapters/applicationDeployment";
@@ -254,6 +256,53 @@ export function buildServer(options: BuildServerOptions = {}): McpServer {
     async (args: unknown) => {
       try {
         const result = handleAppHealth(args, applicationDeploymentAdapter);
+        return {
+          structuredContent: result as unknown as Record<string, unknown>,
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            { type: "text" as const, text: error instanceof Error ? error.message : "invalid input" },
+          ],
+        };
+      }
+    },
+  );
+
+  // Deterministic advisory composition over the SAME construction-time
+  // evidence sources already injected by 05C (application/deployment adapter)
+  // and the existing local VPS evidence adapter. Registered unconditionally:
+  // without a configured application source the tool truthfully reports
+  // UNAVAILABLE. It reuses the certified assessDeployReady classifier — no
+  // readiness logic is duplicated, no MCP tool output is consumed, and it
+  // grants no deployment authority.
+  server.registerTool(
+    "engineering.deploy.ready",
+    {
+      title: "Deployment readiness",
+      description:
+        "Based on currently configured validated operational evidence, does the " +
+        "application satisfy the minimum deterministic prerequisites for attempting " +
+        "a deployment? Deterministic read-only advisory verdict (READY | NOT_READY | " +
+        "UNKNOWN | UNAVAILABLE) computed ONLY by the certified readiness classifier " +
+        "over the operator-configured release-state evidence source " +
+        "(MEMORYOS_VPS_GUARDIAN_RELEASE_STATE_FILE, the same source as " +
+        "engineering.deploy.status) and existing local VPS health/capacity evidence " +
+        "— no new configuration. UNKNOWN means required valid evidence is incomplete; " +
+        "UNAVAILABLE means a required evidence source is unavailable. " +
+        "evidenceAgeSeconds is factual and never changes the verdict. Advisory only: " +
+        "this tool deploys nothing, approves nothing, grants no deployment or " +
+        "recovery authority, does not predict deployment success and does not " +
+        "inspect code, migrations or release contents. Input must be exactly {}. No " +
+        "mutation, no shell, no SSH, no network, no secrets.",
+      inputSchema: z.object({}).strict(),
+      outputSchema: deployReadyOutputSchema,
+    },
+    async (args: unknown) => {
+      try {
+        const result = handleDeployReady(args, applicationDeploymentAdapter, localSystemHealthAdapter);
         return {
           structuredContent: result as unknown as Record<string, unknown>,
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],

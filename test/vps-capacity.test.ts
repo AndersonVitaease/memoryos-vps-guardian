@@ -151,10 +151,13 @@ describe("MCP server (four tools)", () => {
         "engineering.app.health",
         "engineering.deploy.ready",
         "engineering.deploy.status",
+        "engineering.docker.health",
+        "engineering.logs.explain",
         "engineering.vps.capacity",
         "engineering.vps.health",
         "engineering.vps.incident.summary",
         "engineering.vps.what_changed",
+        "engineering.vps.why_down",
       ]);
       for (const tool of listed.tools) {
         expect((tool.inputSchema as { additionalProperties?: boolean }).additionalProperties).toBe(false);

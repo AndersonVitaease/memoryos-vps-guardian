@@ -390,10 +390,13 @@ describe("MCP server integration", () => {
     "engineering.app.health",
     "engineering.deploy.ready",
     "engineering.deploy.status",
+    "engineering.docker.health",
+    "engineering.logs.explain",
     "engineering.vps.capacity",
     "engineering.vps.health",
     "engineering.vps.incident.summary",
     "engineering.vps.what_changed",
+    "engineering.vps.why_down",
   ];
 
   async function withServer(applicationDeploymentAdapter?: ApplicationDeploymentAdapter) {
@@ -404,7 +407,7 @@ describe("MCP server integration", () => {
     return { server, client };
   }
 
-  it("lists exactly the seven public tools", async () => {
+  it("lists exactly the ten public tools", async () => {
     const { server, client } = await withServer();
     try {
       const listed = await client.listTools();

@@ -4,8 +4,9 @@
  * Registers the implemented tools: engineering.vps.health,
  * engineering.vps.capacity, engineering.vps.what_changed,
  * engineering.vps.incident.summary, engineering.deploy.status,
- * engineering.app.health and engineering.deploy.ready (read-only,
- * deterministic). The
+ * engineering.app.health, engineering.deploy.ready,
+ * engineering.docker.health, engineering.vps.why_down and
+ * engineering.logs.explain (read-only, deterministic). The
  * what_changed instance is created per buildServer() call and shared with the
  * incident summary composition: its baseline and last observation live only
  * in the memory of this process.
@@ -26,7 +27,13 @@ import { handleDeployReady, deployReadyOutputSchema } from "./tools/deployReady"
 import { localSystemHealthAdapter } from "./adapters/systemHealth";
 import { createReleaseStateFileAdapter } from "./adapters/releaseStateFile";
 import type { ApplicationDeploymentAdapter } from "./adapters/applicationDeployment";
-
+import { handleDockerHealth, dockerHealthOutputSchema } from "./tools/dockerHealth";
+import { createDockerHealthFileAdapter } from "./adapters/dockerHealthFile";
+import type { DockerHealthAdapter } from "./adapters/dockerHealth";
+import { handleVpsWhyDown, vpsWhyDownOutputSchema } from "./tools/vpsWhyDown";
+import { handleLogsExplain, logsExplainOutputSchema } from "./tools/logsExplain";
+import { createLogEvidenceFileAdapter } from "./adapters/logEvidenceFile";
+import type { LogEvidenceAdapter } from "./adapters/logEvidence";
 export interface BuildServerOptions {
   /**
    * Optional construction-time application/deployment evidence source
@@ -36,6 +43,24 @@ export interface BuildServerOptions {
    * MCP agent can never supply or change it.
    */
   applicationDeploymentAdapter?: ApplicationDeploymentAdapter | null;
+
+  /**
+   * Optional construction-time docker/container health evidence source
+   * (e.g. the docker-health file adapter). When absent (undefined or null),
+   * engineering.docker.health is still registered and truthfully reports
+   * UNAVAILABLE. The path authority lives entirely with the operator; the
+   * MCP agent can never supply or change it.
+   */
+  dockerHealthAdapter?: DockerHealthAdapter | null;
+
+  /**
+   * Optional construction-time log evidence source (e.g. the log-evidence
+   * file adapter). When absent (undefined or null), engineering.logs.explain
+   * is still registered and truthfully reports UNAVAILABLE. The path
+   * authority lives entirely with the operator; the MCP agent can never
+   * supply or change it.
+   */
+  logsEvidenceAdapter?: LogEvidenceAdapter | null;
 }
 
 export function buildServer(options: BuildServerOptions = {}): McpServer {
@@ -188,6 +213,8 @@ export function buildServer(options: BuildServerOptions = {}): McpServer {
   // never fabricated, never throwing). The adapter performs its own strict
   // validation and fail-closed collection; no MCP argument carries evidence.
   const applicationDeploymentAdapter = options.applicationDeploymentAdapter ?? null;
+  const dockerHealthAdapter = options.dockerHealthAdapter ?? null;
+  const logEvidenceAdapter = options.logsEvidenceAdapter ?? null;
 
   server.registerTool(
     "engineering.deploy.status",
@@ -318,11 +345,171 @@ export function buildServer(options: BuildServerOptions = {}): McpServer {
     },
   );
 
+  // Tool 08: registered unconditionally; without an operator-configured
+  // docker-health evidence source it truthfully reports UNAVAILABLE.
+  server.registerTool(
+    "engineering.docker.health",
+    {
+      title: "Docker container health",
+      description:
+        'Is the configured Docker/container workload healthy? Deterministic read-only advisory verdict ' +
+        "(HEALTHY | DEGRADED | UNKNOWN | UNAVAILABLE) computed ONLY from the operator-configured docker-health " +
+        "evidence source (MEMORYOS_VPS_GUARDIAN_DOCKER_HEALTH_FILE, one fixed operator-controlled JSON file " +
+        "produced outside this process; aggregated counts only). This tool does NOT access the Docker socket, " +
+        "does NOT run the docker CLI, and does NOT probe containers: no shell, no SSH, no network, no secrets, " +
+        "no LLM, no mutation, no deployment or recovery authority. It never infers root causes; UNKNOWN means " +
+        "the valid evidence is incomplete or inconsistent, UNAVAILABLE means the evidence source is unavailable; " +
+        "absence of evidence is never read as HEALTHY. Input must be exactly {} — the agent can never select a " +
+        "container, host, path or socket.",
+      inputSchema: z.object({}).strict(),
+      outputSchema: dockerHealthOutputSchema,
+    },
+    async (args: unknown) => {
+      try {
+        const result = handleDockerHealth(args, dockerHealthAdapter);
+        return {
+          structuredContent: result as unknown as Record<string, unknown>,
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            { type: "text" as const, text: error instanceof Error ? error.message : "invalid input" },
+          ],
+        };
+      }
+    },
+  );
+
+  // Tool 09: registered unconditionally; deterministic synthesis of evidence
+  // already available to this server (local VPS health/capacity always, plus
+  // the optional application/deployment and docker-health sources when
+  // configured). Without any optional source it still reports the local VPS
+  // signals truthfully; missing categories are absent from signals.
+  server.registerTool(
+    "engineering.vps.why_down",
+    {
+      title: "VPS / application problem signals",
+      description:
+        'Why does the currently configured VPS/application appear unhealthy? Deterministic read-only diagnostic ' +
+        "synthesis of the evidence already available to this server: local VPS health and capacity plus the " +
+        "operator-configured application/deployment and docker-health sources when present. It reports normalized " +
+        "signals (VPS_HEALTH, CAPACITY, APPLICATION_HEALTH, DEPLOYMENT, DOCKER), what is degraded, what is unknown " +
+        "and what is not observable — SIGNALS, not root causes: correlation is never presented as causation and no " +
+        "recovery or deployment authority exists. No shell, no SSH, no network probe, no Docker socket, no logs, " +
+        "no secrets, no LLM, no mutation. Input must be exactly {} — the agent can never select a host, " +
+        "application, container or path.",
+      inputSchema: z.object({}).strict(),
+      outputSchema: vpsWhyDownOutputSchema,
+    },
+    async (args: unknown) => {
+      try {
+        const result = handleVpsWhyDown(args, localSystemHealthAdapter, applicationDeploymentAdapter, dockerHealthAdapter);
+        return {
+          structuredContent: result as unknown as Record<string, unknown>,
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            { type: "text" as const, text: error instanceof Error ? error.message : "invalid input" },
+          ],
+        };
+      }
+    },
+  );
+
+  // Tool 10: registered unconditionally; without an operator-configured
+  // log-evidence source it truthfully reports UNAVAILABLE. It is NOT a log
+  // browser: the ONLY evidence is the one operator-fixed structured JSON
+  // file configured at startup; no MCP argument carries evidence.
+  server.registerTool(
+    "engineering.logs.explain",
+    {
+      title: "Log signal explanations",
+      description:
+        'What do the currently configured operational log signals mean? Deterministic read-only advisory explanations ' +
+        "(EXPLAINED | UNKNOWN | UNAVAILABLE) computed ONLY from the operator-configured log-evidence source " +
+        "(MEMORYOS_VPS_GUARDIAN_LOG_EVIDENCE_FILE, one fixed operator-controlled structured JSON file of already-normalized " +
+        "log signals produced outside this process). NOT a log browser: it never reads raw logs, never tails or watches " +
+        "files, never runs grep, journalctl or docker logs, and never touches the Docker socket. Classification is a small " +
+        "deterministic taxonomy (out-of-memory, connection refused, timeout, port-bind failure, DNS failure, health-check " +
+        "failure, process exit, permission failure) matched from producer-supplied codes first; unclassifiable signals " +
+        "are reported as UNKNOWN and evidence messages are never returned. Explanations are advisory: no shell, no SSH, " +
+        "no child processes, no network, no LLM, no mutation, no recovery authority. Input must be exactly {} — the agent " +
+        "can never select a path, file, container, service, journal, query or time range.",
+      inputSchema: z.object({}).strict(),
+      outputSchema: logsExplainOutputSchema,
+    },
+    async (args: unknown) => {
+      try {
+        const result = handleLogsExplain(args, logEvidenceAdapter);
+        return {
+          structuredContent: result as unknown as Record<string, unknown>,
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            { type: "text" as const, text: error instanceof Error ? error.message : "invalid input" },
+          ],
+        };
+      }
+    },
+  );
+
   return server;
 }
 
 /** The single optional startup environment variable for the evidence source. */
 export const RELEASE_STATE_FILE_ENV_VAR = "MEMORYOS_VPS_GUARDIAN_RELEASE_STATE_FILE";
+
+/** The single optional startup environment variable for the docker-health evidence source. */
+export const DOCKER_HEALTH_FILE_ENV_VAR = "MEMORYOS_VPS_GUARDIAN_DOCKER_HEALTH_FILE";
+
+/**
+ * Startup-only wiring: map the ONE approved operator-controlled environment
+ * variable to the docker-health file adapter, exactly like the release-state
+ * wiring. Read exactly once, only when main() runs; undefined or "" means no
+ * adapter (the tool then reports UNAVAILABLE). No trimming, no coercion, no
+ * dynamic reload; the configured value is never echoed. Any non-empty value
+ * is validated by createDockerHealthFileAdapter, which throws at construction
+ * on an invalid operator path.
+ */
+export function createDockerHealthAdapterFromEnvironment(
+  read: (name: string) => string | undefined = (name) => process.env[name],
+): DockerHealthAdapter | null {
+  const configured = read(DOCKER_HEALTH_FILE_ENV_VAR);
+  if (configured === undefined || configured === "") {
+    return null;
+  }
+  return createDockerHealthFileAdapter({ path: configured });
+}
+
+/** The single optional startup environment variable for the log evidence source. */
+export const LOG_EVIDENCE_FILE_ENV_VAR = "MEMORYOS_VPS_GUARDIAN_LOG_EVIDENCE_FILE";
+
+/**
+ * Startup-only wiring: map the ONE approved operator-controlled environment
+ * variable to the log-evidence file adapter, exactly like the docker-health
+ * wiring. Read exactly once, only when main() runs; undefined or "" means no
+ * adapter (the tool then reports UNAVAILABLE). No trimming, no coercion, no
+ * dynamic reload; the configured value is never echoed. Any non-empty value
+ * is validated by createLogEvidenceFileAdapter, which throws at construction
+ * on an invalid operator path.
+ */
+export function createLogEvidenceAdapterFromEnvironment(
+  read: (name: string) => string | undefined = (name) => process.env[name],
+): LogEvidenceAdapter | null {
+  const configured = read(LOG_EVIDENCE_FILE_ENV_VAR);
+  if (configured === undefined || configured === "") {
+    return null;
+  }
+  return createLogEvidenceFileAdapter({ path: configured });
+}
 
 /**
  * Startup-only wiring: map the ONE approved operator-controlled environment
@@ -346,6 +533,8 @@ export function createApplicationDeploymentAdapterFromEnvironment(
 export async function main(): Promise<void> {
   const server = buildServer({
     applicationDeploymentAdapter: createApplicationDeploymentAdapterFromEnvironment(),
+    dockerHealthAdapter: createDockerHealthAdapterFromEnvironment(),
+    logsEvidenceAdapter: createLogEvidenceAdapterFromEnvironment(),
   });
   await server.connect(new StdioServerTransport());
 }

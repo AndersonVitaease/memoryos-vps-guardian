@@ -30,20 +30,20 @@ See [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md) for the full public securit
 
 ## Initial public Simple Tools catalog (planned v0.1 public tool surface)
 
-The ten tools below define the initial public tool surface. Currently seven are implemented — `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed`, `engineering.vps.incident.summary`, `engineering.deploy.status`, `engineering.app.health` and `engineering.deploy.ready`; the remaining three are planned for the v0.1 surface (see [Available tools](#available-tools) below).
+The ten tools below define the initial public tool surface. Currently ten are implemented — `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed`, `engineering.vps.incident.summary`, `engineering.deploy.status`, `engineering.app.health`, `engineering.deploy.ready`, `engineering.docker.health`, `engineering.vps.why_down` and `engineering.logs.explain` (see [Available tools](#available-tools) below).
 
 | # | Tool | Answers | Status |
 |---:|------|---------|--------|
 | 1 | `engineering.vps.health` | Is my VPS healthy? | IMPLEMENTED |
-| 2 | `engineering.vps.why_down` | Why is my VPS or application having a problem? | PLANNED |
+| 2 | `engineering.vps.why_down` | Why is my VPS or application having a problem? | IMPLEMENTED |
 | 3 | `engineering.deploy.status` | Is my deployment working? | IMPLEMENTED |
 | 4 | `engineering.vps.capacity` | Is my VPS close to its limits? | IMPLEMENTED |
 | 5 | `engineering.vps.what_changed` | What changed recently? | IMPLEMENTED |
 | 6 | `engineering.app.health` | What application health state is reported? | IMPLEMENTED |
 | 7 | `engineering.vps.incident.summary` | What is happening with my VPS right now? | IMPLEMENTED |
 | 8 | `engineering.deploy.ready` | Are the minimum deterministic deployment prerequisites currently met? | IMPLEMENTED |
-| 9 | `engineering.docker.health` | Are my containers healthy? | PLANNED |
-| 10 | `engineering.logs.explain` | What do these errors/logs mean? | PLANNED |
+| 9 | `engineering.docker.health` | Are my containers healthy? | IMPLEMENTED |
+| 10 | `engineering.logs.explain` | What do these errors/logs mean? | IMPLEMENTED |
 
 ## Security model
 
@@ -57,7 +57,7 @@ Full principles: [docs/SECURITY-MODEL.md](docs/SECURITY-MODEL.md). Public vs. pr
 
 ## Current status
 
-- **Seven public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed`, `engineering.vps.incident.summary`, `engineering.deploy.status`, `engineering.app.health` and `engineering.deploy.ready` (read-only, deterministic, evidence-based). `what_changed` is session-scoped — it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. `incident.summary` is a deterministic composition over the same evidence: it reports NORMAL, ATTENTION or UNKNOWN, never a root cause, and calling it counts as one shared change observation. `deploy.status` reports the deployment state from the operator-configured release-state evidence source (see [Available tools](#available-tools) below); without configuration it truthfully reports UNAVAILABLE, and `app.health` answers the application health question from the same source. The other three tools of the catalog are planned, not implemented. The application/deployment safe adapter contract (typed evidence, strict validation and pure classifiers — see [Safe adapter contract](#safe-adapter-contract-applicationdeployment-evidence) below) is implemented as a code-level seam, with the release-state file transport as its first evidence source.
+- **Ten public Simple Tools implemented:** the MCP server ships `engineering.vps.health`, `engineering.vps.capacity`, `engineering.vps.what_changed`, `engineering.vps.incident.summary`, `engineering.deploy.status`, `engineering.app.health`, `engineering.docker.health`, `engineering.vps.why_down` and `engineering.logs.explain` (read-only, deterministic, evidence-based). `what_changed` is session-scoped - it compares only observations made by the running MCP process; restarting the server resets its baseline, and it has no visibility into anything before that baseline. `incident.summary` is a deterministic composition over the same evidence: it reports NORMAL, ATTENTION or UNKNOWN, never a root cause, and calling it counts as one shared change observation. `deploy.status` reports the deployment state from the operator-configured release-state evidence source (see [Available tools](#available-tools) below); without configuration it truthfully reports UNAVAILABLE, and `app.health` answers the application health question from the same source. The application/deployment safe adapter contract (typed evidence, strict validation and pure classifiers - see [Safe adapter contract](#safe-adapter-contract-applicationdeployment-evidence) below) is implemented as a code-level seam, with the release-state file transport as its first evidence source.
 - No stable release has been published yet.
 
 ## Planned public roadmap
@@ -108,7 +108,7 @@ Replace `<path-to-memoryos-vps-guardian>` with the local folder where you cloned
 
 ## Available tools
 
-Seven tools are implemented in this MVP:
+Ten tools are implemented in this MVP:
 
 ### `engineering.vps.health`
 
@@ -197,7 +197,7 @@ Answers: **"What is happening on this VPS right now, according to local evidence
 
 **Shared change history:** this tool uses the same session-scoped `what_changed` instance, so calling `engineering.vps.incident.summary` counts as one change observation — direct `engineering.vps.what_changed` calls and summary calls advance the same sequence.
 
-Nothing beyond these seven tools (Docker health, log explanation, etc.) is implemented yet — the remaining three tools are part of the planned catalog above.
+Nothing beyond these ten tools is implemented yet.
 
 ### `engineering.deploy.status`
 
@@ -230,6 +230,40 @@ Nothing beyond these seven tools (Docker health, log explanation, etc.) is imple
 **Advisory only:** this tool deploys nothing, approves nothing and grants no deployment or recovery authority. It does NOT predict deployment success and does not inspect code, migrations or release contents. UNKNOWN-first: any required component without evidence yields UNKNOWN, never READY or NOT_READY; absence of evidence is never read as a positive. UNAVAILABLE means a required evidence source is unavailable (no application source configured, or it returned no valid evidence).
 
 **Output:** `status`, `summary`, `applicationId`, `components`, `reasons`, `evidenceAgeSeconds` and a fixed `limitations` list. `evidenceAgeSeconds` is factual evidence age; it never changes the verdict. Paths, filenames, raw evidence values and errors are never exposed. The four source Simple Tools are never reinterpreted: `engineering.deploy.ready` composes their underlying certified classifiers directly.
+
+### `engineering.docker.health`
+
+**Question answered:** Is the configured Docker/container workload healthy?
+
+**Evidence and reuse:** answered only from the operator-configured docker-health evidence source (`MEMORYOS_VPS_GUARDIAN_DOCKER_HEALTH_FILE`, one fixed operator-controlled JSON file produced by the operator's own monitoring stack outside this process) via the pure deterministic `assessDockerHealth` classifier - no new framework, no MCP tool-to-tool recursion, no Docker socket, no Docker CLI, no shell, no SSH, no network, no child processes, no LLM, no mutation, no deployment or recovery authority. Evidence is aggregated counts only (`containers`: `total`, `running`, `unhealthy`, `restarting`, `stopped`, `unknown`); no container names, IDs, images, labels, mounts, commands or raw inspect data are ever exposed. The MCP input must be exactly `{}` - the agent can never select a container, host, path, socket or filter.
+
+**Status semantics (deterministic, UNKNOWN-first):** `UNAVAILABLE` when no evidence source is configured or it returns no valid evidence; `UNKNOWN` when required state is incomplete, any container state is unknown, or the aggregate counts are internally inconsistent - missing data is never converted into DEGRADED or HEALTHY; `DEGRADED` when the evidence source reports the runtime unavailable or any unhealthy/restarting/stopped containers; `HEALTHY` only when the runtime is reported available and all configured containers are running. No root causes are inferred. `evidenceAgeSeconds` is factual only and never changes the verdict. The verdict is computed independently of `engineering.vps.health`, `engineering.deploy.status` and `engineering.app.health`; contradictory states remain possible.
+
+**Zero-configuration:** without `MEMORYOS_VPS_GUARDIAN_DOCKER_HEALTH_FILE` the server starts normally, the tool stays registered in tools/list, and it truthfully answers UNAVAILABLE.
+
+### `engineering.vps.why_down`
+
+**Question answered:** Why does the currently configured VPS/application appear unhealthy? - concretely: is there evidence of a problem, which concrete signals are observed, and what cannot be determined.
+
+**Evidence and reuse:** a deterministic synthesis of the evidence already available to this server - one local system-health snapshot feeds the existing `assessVpsHealth` and `assessVpsCapacity` classifiers, and when configured the operator-controlled release-state and docker-health sources feed `assessApplicationHealth`, `assessDeployStatus` and `assessDockerHealth` directly (no MCP tool-to-tool recursion, no new evidence source, no new environment variable, no Docker socket, no shell, no SSH, no network probe, no child processes, no LLM, no mutation). The input must be exactly `{}` - the agent can never select a host, application, container or path.
+
+**Signals, not causes:** each signal is a normalized `{category, source, status, summary}` line from the existing classifiers (`VPS_HEALTH`, `CAPACITY`, `APPLICATION_HEALTH`, `DEPLOYMENT`, `DOCKER`). Problem predicates are factual only: VPS health DEGRADED, capacity PRESSURED, application health DEGRADED, deployment FAILED, Docker DEGRADED. A deployment IN_FLIGHT or PENDING is reported factually and is not a problem signal. When several degraded signals co-occur, all are reported and none is chosen as the cause - correlation is never presented as causation, and no root-cause field exists.
+
+**Status semantics (deterministic, UNKNOWN-first):** `UNAVAILABLE` when no evidence source is configured at all; `UNKNOWN` when any observed signal is UNKNOWN (incomplete or inconsistent evidence) or UNAVAILABLE (a configured source returned nothing this call); `DEGRADED` when at least one factual problem signal is observed; `HEALTHY` when all observed signals report no degraded or problem condition. Categories without a configured source are absent from `signals` and their condition is never read as HEALTHY; Docker evidence being unavailable never by itself implies failure.
+
+**Zero-configuration:** the server starts normally without the optional application/deployment and docker-health sources; the tool stays registered in tools/list and answers from the local VPS health and capacity signals alone, with missing categories explicit in the limitations.
+
+### `engineering.logs.explain`
+
+**Question answered:** What do the currently configured operational log signals mean?
+
+**Evidence and reuse:** answered only from the operator-configured log-evidence source (`MEMORYOS_VPS_GUARDIAN_LOG_EVIDENCE_FILE`, one fixed operator-controlled structured JSON file of already-normalized, already-sanitized log signals produced by the operator's own monitoring stack outside this process) via the pure deterministic `assessLogsExplain` classifier. It is NOT a log browser: no raw log files, no tail, no watch, no directories, no grep, no journalctl, no docker logs, no Docker socket, no shell, no SSH, no child processes, no network, no LLM, no mutation. The input must be exactly `{}` - the agent can never select a path, file, container, service, journal, query, filter or time range, and evidence messages are never returned.
+
+**Explanations (deterministic, no AI):** a small fixed taxonomy (`OUT_OF_MEMORY`, `CONNECTION_REFUSED`, `TIMEOUT`, `PORT_BIND_FAILURE`, `DNS_FAILURE`, `HEALTHCHECK_FAILURE`, `PROCESS_EXIT`, `PERMISSION_FAILURE`) is matched first from producer-supplied structured codes, then - only when no code matches - from a small fixed set of message rules. Unclassifiable signals are reported as UNKNOWN and never guessed. Each explanation is compact and normalized (`category`, highest observed `severity`, fixed `meaning`, advisory plain-language `suggestedCheck`); no shell commands are ever emitted.
+
+**Status semantics (deterministic):** `UNAVAILABLE` when no evidence source is configured or it returns no valid evidence; `UNKNOWN` when the valid evidence document contains no entries or every entry is unclassifiable; `EXPLAINED` when at least one signal maps to a known category. Statuses describe explanations, not health.
+
+**Zero-configuration:** without `MEMORYOS_VPS_GUARDIAN_LOG_EVIDENCE_FILE` the server starts normally, the tool stays registered in tools/list, and it truthfully answers UNAVAILABLE.
 
 ## Safe adapter contract (application/deployment evidence)
 

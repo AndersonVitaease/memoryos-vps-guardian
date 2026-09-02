@@ -2,8 +2,27 @@
   "name": "memoryos-vps-guardian",
   "version": "0.1.0",
   "private": true,
+  "description": "Safe, read-only MCP server for VPS operational evidence: health, capacity, change observation, incident summary, deployment state, application health and deployment readiness.",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "vps",
+    "server-health",
+    "devops",
+    "ai-tools",
+    "engineering"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AndersonVitaease/memoryos-vps-guardian.git"
+  },
+  "homepage": "https://github.com/AndersonVitaease/memoryos-vps-guardian#readme",
+  "bugs": {
+    "url": "https://github.com/AndersonVitaease/memoryos-vps-guardian/issues"
+  },
   "type": "module",
-  "description": "Public MVP: engineering.vps.health MCP tool (read-only, deterministic, evidence-first).",
   "engines": {
     "node": ">=18"
   },

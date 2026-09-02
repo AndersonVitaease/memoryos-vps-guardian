@@ -210,6 +210,17 @@ The code-level seam for the planned application/deployment tools (`engineering.d
 
 **No transport ships with this contract.** It performs no file, socket, container-runtime, environment or credential access of any kind, and no new MCP tool is registered (the public catalog remains the four tools above). Evidence authority stays with the host process that constructs the server; MCP tool arguments never carry this evidence. Missing evidence maps deterministically to `UNKNOWN`/`UNAVAILABLE` and is never inferred.
 
+## Release-state file transport (ReleaseStateFileAdapter)
+
+`createReleaseStateFileAdapter({ path })` in `src/adapters/releaseStateFile.ts` is the first evidence source for the contract above: it reads **one** operator-configured local JSON file whose entire content is one `ApplicationDeploymentEvidence` document (all eight fields, including the required `source` label).
+
+- **The path is operator-controlled and fixed at construction time.** It is validated once (string, 1–4096 characters, no control characters) and resolved once with `path.resolve()`; invalid configuration throws at construction. The MCP agent can never supply or modify the path, and no MCP tool consumes evidence through its arguments.
+- **Read-only, no generic filesystem access.** The only I/O is `statSync()` + `readFileSync()` against that one absolute path — no writes, renames, deletes, directory listing, globs, watchers, polling, streams, retries, caching, or environment access, and no generic filesystem layer.
+- **64 KiB hard limit** (`MAX_RELEASE_STATE_BYTES = 65536`), enforced before reading (via `stat`) and re-checked after reading.
+- **Fail-closed.** A missing file, permission denied, directory/non-regular file, oversized file, empty or malformed JSON, or evidence failing the strict contract schema all map deterministically to `null` (→ `UNAVAILABLE`), never a crash, a guessed status, or partially accepted evidence. No staleness is computed here and no clock is used: `observedAt` passes through exactly as validated, and staleness display/policy belongs to the consuming MCP tool.
+- **No MCP tool registers or consumes it yet**; the public catalog remains the four tools above.
+- **Producer recommendation:** write a temporary file, then atomically rename it over the configured path, so readers never observe a partial write (a partial write anyway fails closed).
+
 ## Quick validation
 
 From the repository root:

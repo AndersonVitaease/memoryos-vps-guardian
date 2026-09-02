@@ -3,8 +3,8 @@
  *
  * Registers the implemented tools: engineering.vps.health,
  * engineering.vps.capacity, engineering.vps.what_changed,
- * engineering.vps.incident.summary and engineering.deploy.status
- * (read-only, deterministic). The
+ * engineering.vps.incident.summary, engineering.deploy.status and
+ * engineering.app.health (read-only, deterministic). The
  * what_changed instance is created per buildServer() call and shared with the
  * incident summary composition: its baseline and last observation live only
  * in the memory of this process.
@@ -20,6 +20,7 @@ import { handleVpsCapacity, vpsCapacityOutputSchema } from "./tools/vpsCapacity"
 import { createVpsWhatChangedTool, vpsWhatChangedOutputSchema } from "./tools/vpsWhatChanged";
 import { createVpsIncidentSummaryTool, vpsIncidentSummaryOutputSchema } from "./tools/vpsIncidentSummary";
 import { handleDeployStatus, deployStatusOutputSchema } from "./tools/deployStatus";
+import { handleAppHealth, appHealthOutputSchema } from "./tools/appHealth";
 import { localSystemHealthAdapter } from "./adapters/systemHealth";
 import { createReleaseStateFileAdapter } from "./adapters/releaseStateFile";
 import type { ApplicationDeploymentAdapter } from "./adapters/applicationDeployment";
@@ -207,6 +208,52 @@ export function buildServer(options: BuildServerOptions = {}): McpServer {
     async (args: unknown) => {
       try {
         const result = handleDeployStatus(args, applicationDeploymentAdapter);
+        return {
+          structuredContent: result as unknown as Record<string, unknown>,
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            { type: "text" as const, text: error instanceof Error ? error.message : "invalid input" },
+          ],
+        };
+      }
+    },
+  );
+
+  // Construction-time evidence source shared with engineering.deploy.status.
+  // Registered unconditionally: without a configured source the tool
+  // truthfully reports UNAVAILABLE. It consumes the SAME injected
+  // ApplicationDeploymentAdapter — no second env variable, transport, adapter
+  // or config source exists. app.health and deploy.status answer different
+  // questions through different certified classifiers and never reconcile
+  // each other.
+  server.registerTool(
+    "engineering.app.health",
+    {
+      title: "Application health",
+      description:
+        "What application health state is reported by the configured validated " +
+        "application/deployment evidence source? Deterministic read-only verdict " +
+        "(HEALTHY | DEGRADED | UNKNOWN | UNAVAILABLE) built ONLY from the " +
+        "operator-configured release-state evidence source " +
+        "(MEMORYOS_VPS_GUARDIAN_RELEASE_STATE_FILE, read-only JSON file) — the " +
+        "same source and configuration as engineering.deploy.status; no new " +
+        "configuration. UNAVAILABLE means no source is configured or it returned " +
+        "no valid evidence; UNKNOWN means a valid source explicitly reported no " +
+        "application health. evidenceAgeSeconds is factual evidence age and never " +
+        "changes the status. It does NOT probe the application, inspect Docker, " +
+        "call HTTP, infer health from deployment status, or diagnose root cause. " +
+        "Input must be exactly {}. No mutation, no shell, no SSH, no network, no " +
+        "secrets.",
+      inputSchema: z.object({}).strict(),
+      outputSchema: appHealthOutputSchema,
+    },
+    async (args: unknown) => {
+      try {
+        const result = handleAppHealth(args, applicationDeploymentAdapter);
         return {
           structuredContent: result as unknown as Record<string, unknown>,
           content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],

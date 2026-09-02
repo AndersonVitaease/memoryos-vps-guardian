@@ -200,6 +200,7 @@ describe("MCP server integration", () => {
     try {
       const listed = await client.listTools();
       expect(listed.tools.map((t) => t.name).sort()).toEqual([
+        "engineering.app.health",
         "engineering.deploy.status",
         "engineering.vps.capacity",
         "engineering.vps.health",

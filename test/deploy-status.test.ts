@@ -295,7 +295,7 @@ describe("startup env wiring helper", () => {
 });
 
 describe("MCP server integration", () => {
-  it("lists exactly the five public tools", async () => {
+  it("lists exactly the six public tools", async () => {
     const server = buildServer();
     const client = new Client({ name: "smoke-client", version: "0.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -304,6 +304,7 @@ describe("MCP server integration", () => {
       const listed = await client.listTools();
       expect([...listed.tools].map((t) => t.name).sort()).toEqual(
         [
+          "engineering.app.health",
           "engineering.deploy.status",
           "engineering.vps.capacity",
           "engineering.vps.health",
